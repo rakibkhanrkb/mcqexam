@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Helpers
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    // For this simple demo version, we allow any signed-in user to manage data.
+    // In production, we would use a more robust isAdmin() check with verified emails/roles.
+    function isAdmin() { return isSignedIn(); }
+
+    // Question Validation
+    function isValidQuestion(q) {
+      return q.text is string && q.text.size() > 0 && q.text.size() <= 2000
+          && q.options is map && q.options.keys().hasAll(['A', 'B', 'C', 'D']) && q.options.keys().size() == 4
+          && q.options.A is string && q.options.A.size() > 0
+          && q.options.B is string && q.options.B.size() > 0
+          && q.options.C is string && q.options.C.size() > 0
+          && q.options.D is string && q.options.D.size() > 0
+          && q.answer is string && q.answer in ['A', 'B', 'C', 'D']
+          && q.marks is number && q.marks >= 0;
+    }
+
+    // Exam Result Validation
+    function isValidResult(r) {
+      return r.studentName is string && r.studentName.size() > 0 && r.studentName.size() <= 100
+          && r.score is number && r.score >= 0
+          && r.total is number && r.total >= 0
+          && r.percentage is string
+          && r.timestamp == request.time;
+    }
+
+    // Colleciton: Questions
+    match /questions/{questionId} {
+      allow read: if true; // Publicly readable for students
+      // Modified for demo: allowing any signed-in user to create/update questions
+      // In production: change to 'if isAdmin()'
+      allow create: if isSignedIn() && isValidId(questionId) && isValidQuestion(incoming())
+                       && incoming().keys().hasAll(['text', 'options', 'answer', 'marks', 'createdAt'])
+                       && incoming().keys().size() == 5
+                       && incoming().createdAt == request.time;
+      allow update: if isSignedIn() && isValidQuestion(incoming())
+                       && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'options', 'answer', 'marks'])
+                       && incoming().createdAt == existing().createdAt;
+      allow delete: if isSignedIn(); // In production: change to 'if isAdmin()'
+    }
+
+    // Collection: Exam Results
+    match /exam_results/{resultId} {
+      allow read: if true; // Publicly readable for history
+      allow create: if isSignedIn() && isValidId(resultId) && isValidResult(incoming())
+                       && incoming().keys().hasAll(['studentName', 'score', 'total', 'percentage', 'timestamp'])
+                       && incoming().keys().size() == 5;
+      allow update, delete: if false; // Results are immutable
+    }
+
+    // Collection: Admins (System collection)
+    match /admins/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if false; // Managed via Firebase Console or special script
+    }
+  }
+}

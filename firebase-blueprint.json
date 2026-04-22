@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "Question": {
+      "title": "Question",
+      "description": "An MCQ question with 4 options",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "The question text" },
+        "options": {
+          "type": "object",
+          "properties": {
+            "A": { "type": "string" },
+            "B": { "type": "string" },
+            "C": { "type": "string" },
+            "D": { "type": "string" }
+          },
+          "required": ["A", "B", "C", "D"]
+        },
+        "answer": { "type": "string", "enum": ["A", "B", "C", "D"] },
+        "marks": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["text", "options", "answer", "marks"]
+    },
+    "ExamResult": {
+      "title": "Exam Result",
+      "description": "Result of an exam taken by a student",
+      "type": "object",
+      "properties": {
+        "studentName": { "type": "string" },
+        "score": { "type": "number" },
+        "total": { "type": "number" },
+        "percentage": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentName", "score", "total", "percentage"]
+    }
+  },
+  "firestore": {
+    "questions": {
+      "schema": "Question",
+      "description": "Collection of all available questions"
+    },
+    "exam_results": {
+      "schema": "ExamResult",
+      "description": "Historical results of students"
+    }
+  }
+}
