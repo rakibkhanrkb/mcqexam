@@ -9,10 +9,10 @@ export function handleFirestoreError(error: any, operationType: FirestoreErrorIn
     operationType,
     path,
     authInfo: {
-      userId: user?.uid || 'anonymous',
+      userId: user?.uid || 'no-user',
       email: user?.email || 'N/A',
       emailVerified: user?.emailVerified || false,
-      isAnonymous: user?.isAnonymous || true,
+      isAnonymous: user ? user.isAnonymous : false,
       providerInfo: user?.providerData.map(p => ({
         providerId: p.providerId,
         displayName: p.displayName || '',

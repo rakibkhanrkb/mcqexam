@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Question } from '../types';
 import { db, auth } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { signInAnonymously } from 'firebase/auth';
 import { handleFirestoreError } from '../lib/error-handler';
 import { ChevronLeft, ChevronRight, CheckCircle, Clock, LayoutDashboard } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -40,35 +41,47 @@ export default function ExamEngine({ questions, studentName, totalQuestions, tim
 
     const percentageValue = ((score / totalMarks) * 100).toFixed(1);
 
-    const resultDataToSave = {
-      studentName: studentName || 'Anonymous Student',
-      score,
-      total: totalMarks,
-      percentage: `${percentageValue}%`,
-      timestamp: serverTimestamp(),
-      answers: userAnswers,
-      questions: questions
-    };
-
     try {
-      if (auth.currentUser) {
-        await addDoc(collection(db, 'exam_results'), resultDataToSave);
+      // Create a clean, serializable copy for the UI and DB
+      const cleanQuestions = questions.map(q => {
+        const cq: any = {
+          text: q.text,
+          options: { ...q.options },
+          answer: q.answer,
+          marks: q.marks || 1
+        };
+        if (q.id) cq.id = q.id;
+        if (q.createdAt) {
+          cq.createdAt = {
+            seconds: (q.createdAt as any).seconds || 0,
+            nanoseconds: (q.createdAt as any).nanoseconds || 0
+          };
+        }
+        return cq;
+      });
+
+      const finalResultData = {
+        studentName: studentName || 'Anonymous Student',
+        score: score || 0,
+        total: totalMarks || 0,
+        percentage: `${percentageValue}%`,
+        timestamp: serverTimestamp(),
+        answers: { ...userAnswers },
+        questions: cleanQuestions
+      };
+
+      // Attempt to save (rules allow public creation now)
+      try {
+        await addDoc(collection(db, 'exam_results'), finalResultData);
+      } catch (saveErr) {
+        // If it still fails, it might be a payload issue
+        handleFirestoreError(saveErr, 'create', 'exam_results');
       }
       
-      // Pass a clean object to the UI to avoid circular dependency errors (from serverTimestamp sentinel)
-      // and ensure all nested objects like questions are also cleaned of complex types
+      // Sanitized object for React state (no serverTimestamp sentinel)
       const uiResultData = {
-        studentName: resultDataToSave.studentName,
-        score: resultDataToSave.score,
-        total: resultDataToSave.total,
-        percentage: resultDataToSave.percentage,
-        timestamp: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 } as any,
-        answers: { ...resultDataToSave.answers },
-        questions: resultDataToSave.questions.map(q => ({
-          ...q,
-          // Ensure nested Timestamps from Firestore don't cause issues
-          createdAt: q.createdAt ? { seconds: (q.createdAt as any).seconds, nanoseconds: (q.createdAt as any).nanoseconds } : undefined
-        }))
+        ...finalResultData,
+        timestamp: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 } as any
       };
       
       onFinish(uiResultData);

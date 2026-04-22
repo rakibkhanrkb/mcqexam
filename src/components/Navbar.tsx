@@ -10,6 +10,7 @@ interface NavbarProps {
 export default function Navbar({ currentPage, onNavigate }: NavbarProps) {
   const tabs: { id: Page; label: string; icon: any }[] = [
     { id: 'admin', label: 'Admin', icon: Shield },
+    { id: 'login', label: 'Student Portal', icon: LayoutDashboard },
     { id: 'setup', label: 'Exam', icon: PenTool },
     { id: 'history', label: 'Records', icon: History },
   ];
@@ -25,7 +26,7 @@ export default function Navbar({ currentPage, onNavigate }: NavbarProps) {
             <LayoutDashboard className="text-white" size={24} />
           </div>
           <span className="hidden md:block font-black text-xl tracking-tighter bg-gradient-to-r from-accent to-accent2 bg-clip-text text-transparent px-1">
-            CSA MCQ PRO
+            TRY MCQ
           </span>
         </div>
 

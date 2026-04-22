@@ -25,7 +25,15 @@ export interface ExamResult {
   questions: Question[];
 }
 
-export type Page = 'admin' | 'setup' | 'exam' | 'history' | 'result';
+export interface UserAccount {
+  id?: string;
+  userId: string;
+  password?: string;
+  name: string;
+  createdAt?: Timestamp;
+}
+
+export type Page = 'login' | 'admin' | 'setup' | 'exam' | 'history' | 'result';
 
 export interface FirestoreErrorInfo {
   error: string;

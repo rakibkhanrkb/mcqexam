@@ -1,24 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit, where, getDocs } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
-import { Question, ExamResult, Page } from './types';
+import { Question, ExamResult, Page, UserAccount } from './types';
 import Navbar from './components/Navbar';
 import AdminPanel from './components/AdminPanel';
 import ExamEngine from './components/ExamEngine';
+import HistoryDashboard from './components/HistoryDashboard';
 import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, History as HistoryIcon, PlayCircle, Loader2, AlertCircle, ShieldCheck, CheckCircle } from 'lucide-react';
+import { Trophy, History as HistoryIcon, PlayCircle, Loader2, AlertCircle, ShieldCheck, CheckCircle, User, Key, LogIn } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
-  const [currentPage, setCurrentPage] = useState<Page>('setup');
+  const [currentPage, setCurrentPage] = useState<Page>('login');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [history, setHistory] = useState<ExamResult[]>([]);
   const [isAdminAuth, setIsAdminAuth] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [studentAuth, setStudentAuth] = useState<UserAccount | null>(null);
 
   // Exam Config
-  const [studentName, setStudentName] = useState('');
   const [examConfig, setExamConfig] = useState({ count: 10, time: 20 });
   const [activeExamQuestions, setActiveExamQuestions] = useState<Question[]>([]);
   const [lastResult, setLastResult] = useState<ExamResult | null>(null);
@@ -51,8 +52,8 @@ export default function App() {
   }, []);
 
   const handleStartExam = () => {
-    if (!studentName.trim()) {
-      alert("Please enter your name");
+    if (!studentAuth) {
+      setCurrentPage('login');
       return;
     }
     if (questions.length === 0) {
@@ -63,6 +64,38 @@ export default function App() {
     const shuffled = [...questions].sort(() => Math.random() - 0.5).slice(0, count);
     setActiveExamQuestions(shuffled);
     setCurrentPage('exam');
+  };
+
+  const handleStudentLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const loginId = (document.getElementById('stu-id') as HTMLInputElement).value;
+    const loginPass = (document.getElementById('stu-pass') as HTMLInputElement).value;
+
+    if (!loginId || !loginPass) return;
+
+    try {
+      setLoading(true);
+      const q = query(collection(db, 'users'), where('userId', '==', loginId), where('password', '==', loginPass));
+      const snap = await getDocs(q);
+      
+      if (!snap.empty) {
+        const userData = { id: snap.docs[0].id, ...snap.docs[0].data() } as UserAccount;
+        setStudentAuth(userData);
+        setCurrentPage('setup');
+      } else {
+        alert('Invalid Student ID or Password');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Login error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setStudentAuth(null);
+    setCurrentPage('login');
   };
 
   const handleFinishExam = (result: ExamResult) => {
@@ -85,6 +118,58 @@ export default function App() {
 
       <main className="container max-w-7xl mx-auto px-4 py-8">
         <AnimatePresence mode="wait">
+          {currentPage === 'login' && (
+            <motion.div key="login" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-md mx-auto py-20">
+              <div className="text-center mb-10 space-y-4">
+                <div className="w-20 h-20 bg-accent/10 rounded-3xl flex items-center justify-center mx-auto border border-accent/20">
+                  <User className="text-accent" size={40} />
+                </div>
+                <h1 className="text-4xl font-black italic text-text-main tracking-tight">Student Portal</h1>
+                <p className="text-text-dim text-xs font-bold uppercase tracking-widest">Sign in to start session</p>
+              </div>
+
+              <div className="bg-surface border border-border p-10 rounded-[2.5rem] shadow-2xl space-y-8 relative overflow-hidden">
+                <form onSubmit={handleStudentLogin} className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Student ID</label>
+                    <div className="relative">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim" size={18} />
+                      <input 
+                        id="stu-id"
+                        type="text" 
+                        placeholder="Enter your ID" 
+                        className="w-full bg-surface-hover border border-border rounded-2xl p-4 pl-12 outline-none focus:border-accent transition-all font-mono font-bold" 
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Security Password</label>
+                    <div className="relative">
+                      <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim" size={18} />
+                      <input 
+                        id="stu-pass"
+                        type="password" 
+                        placeholder="••••••••" 
+                        className="w-full bg-surface-hover border border-border rounded-2xl p-4 pl-12 outline-none focus:border-accent transition-all font-mono font-bold" 
+                        required
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    type="submit"
+                    className="w-full bg-accent hover:bg-accent2 text-white font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95 uppercase tracking-widest text-sm flex items-center justify-center gap-3"
+                  >
+                    <LogIn size={20} /> Authorize Access
+                  </button>
+                </form>
+              </div>
+              <div className="mt-8 text-center">
+                 <p className="text-[10px] text-text-dim font-bold uppercase tracking-widest italic">Request credentials from administrator</p>
+              </div>
+            </motion.div>
+          )}
+
           {currentPage === 'admin' && (
             <div key="admin">
               {!isAdminAuth ? (
@@ -92,13 +177,13 @@ export default function App() {
                   <div className="bg-surface border border-border p-8 rounded-3xl shadow-2xl space-y-6">
                     <h2 className="text-2xl font-bold text-center">Admin Login</h2>
                     <div className="space-y-4">
-                      <input id="admin-user" type="text" placeholder="Username (rakib)" className="w-full bg-surface-hover border border-border rounded-xl p-3 outline-none focus:border-accent" />
-                      <input id="admin-pass" type="password" placeholder="Password (12345)" className="w-full bg-surface-hover border border-border rounded-xl p-3 outline-none focus:border-accent" />
+                      <input id="admin-user" type="text" placeholder="Username (User))" className="w-full bg-surface-hover border border-border rounded-xl p-3 outline-none focus:border-accent" />
+                      <input id="admin-pass" type="password" placeholder="Password (Pass)" className="w-full bg-surface-hover border border-border rounded-xl p-3 outline-none focus:border-accent" />
                       <button 
                         onClick={() => {
                           const u = (document.getElementById('admin-user') as HTMLInputElement).value;
                           const p = (document.getElementById('admin-pass') as HTMLInputElement).value;
-                          if (u === 'rakib' && p === '12345') setIsAdminAuth(true);
+                          if (u === 'rakib' && p === '01710798934') setIsAdminAuth(true);
                           else alert('Invalid credentials');
                         }}
                         className="w-full bg-accent hover:bg-accent2 text-white font-bold py-3 rounded-xl transition-all"
@@ -116,62 +201,66 @@ export default function App() {
 
           {currentPage === 'setup' && (
             <motion.div key="setup" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-md mx-auto space-y-10 py-10">
-              <div className="text-center space-y-3">
-                <h1 className="text-5xl font-black bg-gradient-to-r from-accent to-accent2 bg-clip-text text-transparent italic tracking-tighter">CSA MCQ PRO</h1>
-                <p className="text-text-dim text-xs font-bold uppercase tracking-[0.2em]">Professional Certification System</p>
-              </div>
-
-              <div className="bg-surface border border-border p-10 rounded-[2.5rem] shadow-2xl space-y-8 relative overflow-hidden group">
-                <div className="absolute -top-10 -right-10 p-4 opacity-10 group-hover:opacity-20 transition-all duration-700 -rotate-12 group-hover:rotate-0">
-                  <PlayCircle size={200} />
+              {!studentAuth ? (
+                <div className="bg-surface border border-border p-10 rounded-[2.5rem] shadow-2xl text-center space-y-6">
+                  <AlertCircle size={48} className="text-danger mx-auto" />
+                  <h2 className="text-xl font-bold">Access Restricted</h2>
+                  <p className="text-text-dim text-sm">You must enter your student credentials to access this section.</p>
+                  <button onClick={() => setCurrentPage('login')} className="w-full bg-accent text-white py-4 rounded-xl font-bold">Go to Portal</button>
                 </div>
-                
-                <h2 className="text-xl font-bold flex items-center gap-2 border-b border-border pb-4">Exam Setup</h2>
-                
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Candidate Name</label>
-                    <input 
-                      value={studentName}
-                      onChange={e => setStudentName(e.target.value)}
-                      type="text" placeholder="Enter your full name" 
-                      className="w-full bg-surface-hover border border-border rounded-2xl p-4 outline-none focus:border-accent transition-all font-medium" 
-                    />
+              ) : (
+                <>
+                  <div className="text-center space-y-3">
+                    <h1 className="text-5xl font-black bg-gradient-to-r from-accent to-accent2 bg-clip-text text-transparent italic tracking-tighter">TRY MCQ</h1>
+                    <p className="text-text-dim text-xs font-bold uppercase tracking-[0.2em]">Welcome, {studentAuth?.name}</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Questions (Max {questions.length})</label>
-                      <input 
-                        value={examConfig.count}
-                        onChange={e => setExamConfig({ ...examConfig, count: parseInt(e.target.value) || 0 })}
-                        type="number" className="w-full bg-surface-hover border border-border rounded-2xl p-4 outline-none focus:border-accent font-mono font-bold" 
-                      />
+                  <div className="bg-surface border border-border p-10 rounded-[2.5rem] shadow-2xl space-y-8 relative overflow-hidden group">
+                    <div className="absolute -top-10 -right-10 p-4 opacity-10 group-hover:opacity-20 transition-all duration-700 -rotate-12 group-hover:rotate-0">
+                      <PlayCircle size={200} />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Time (Minutes)</label>
-                      <input 
-                        value={examConfig.time}
-                        onChange={e => setExamConfig({ ...examConfig, time: parseInt(e.target.value) || 0 })}
-                        type="number" className="w-full bg-surface-hover border border-border rounded-2xl p-4 outline-none focus:border-accent font-mono font-bold" 
-                      />
+                    
+                    <div className="flex justify-between items-center border-b border-border pb-4">
+                      <h2 className="text-xl font-bold flex items-center gap-2">Exam Setup</h2>
+                      <button onClick={handleLogout} className="text-[10px] font-black uppercase text-danger hover:underline">Log Out</button>
+                    </div>
+                    
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Questions (Max {questions.length})</label>
+                          <input 
+                            value={examConfig.count}
+                            onChange={e => setExamConfig({ ...examConfig, count: parseInt(e.target.value) || 0 })}
+                            type="number" className="w-full bg-surface-hover border border-border rounded-2xl p-4 outline-none focus:border-accent font-mono font-bold" 
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-text-dim uppercase tracking-[0.2em]">Time (Minutes)</label>
+                          <input 
+                            value={examConfig.time}
+                            onChange={e => setExamConfig({ ...examConfig, time: parseInt(e.target.value) || 0 })}
+                            type="number" className="w-full bg-surface-hover border border-border rounded-2xl p-4 outline-none focus:border-accent font-mono font-bold" 
+                          />
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={handleStartExam}
+                        disabled={questions.length === 0}
+                        className="w-full bg-accent hover:bg-accent2 text-white font-black py-5 rounded-2xl transition-all shadow-[0_20px_40px_rgba(37,99,235,0.2)] active:scale-95 disabled:opacity-50 uppercase tracking-widest text-sm"
+                      >
+                        START EXAMINATION 🚀
+                      </button>
+                      {questions.length === 0 && (
+                        <p className="text-[10px] text-danger text-center font-bold flex items-center justify-center gap-1 uppercase">
+                          <AlertCircle size={12} /> Database empty. Admin must add questions first.
+                        </p>
+                      )}
                     </div>
                   </div>
-
-                  <button 
-                    onClick={handleStartExam}
-                    disabled={questions.length === 0}
-                    className="w-full bg-accent hover:bg-accent2 text-white font-black py-5 rounded-2xl transition-all shadow-[0_20px_40px_rgba(37,99,235,0.2)] active:scale-95 disabled:opacity-50 uppercase tracking-widest text-sm"
-                  >
-                    START EXAMINATION 🚀
-                  </button>
-                  {questions.length === 0 && (
-                    <p className="text-[10px] text-danger text-center font-bold flex items-center justify-center gap-1 uppercase">
-                      <AlertCircle size={12} /> Database empty. Admin must add questions first.
-                    </p>
-                  )}
-                </div>
-              </div>
+                </>
+              )}
             </motion.div>
           )}
 
@@ -179,7 +268,7 @@ export default function App() {
             <motion.div key="exam" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <ExamEngine 
                 questions={activeExamQuestions}
-                studentName={studentName}
+                studentName={studentAuth?.name || 'Anonymous'}
                 totalQuestions={examConfig.count}
                 timeLimitMinutes={examConfig.time}
                 onFinish={handleFinishExam}
@@ -188,45 +277,14 @@ export default function App() {
           )}
 
           {currentPage === 'history' && (
-            <motion.div key="history" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-              <div className="flex items-center justify-between">
-                <h2 className="text-3xl font-black flex items-center gap-3 italic">
-                  <HistoryIcon className="text-accent" size={32} /> Exam Records
-                </h2>
-                <div className="text-[10px] font-bold text-text-dim uppercase tracking-widest bg-surface border border-border px-4 py-2 rounded-full">
-                   Latest 50 Entries
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {history.map(res => (
-                  <div key={res.id} className="bg-surface border border-border p-5 rounded-[2rem] flex items-center justify-between hover:border-accent/40 transition-all group hover:shadow-xl hover:-translate-y-1">
-                    <div className="flex items-center gap-5">
-                      <div className="w-14 h-14 rounded-2xl bg-accent text-white flex items-center justify-center text-xl font-black shadow-lg shadow-accent/20 rotate-3 group-hover:rotate-0 transition-transform">
-                        {res.studentName[0].toUpperCase()}
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-lg tracking-tight text-text-main">{res.studentName}</h4>
-                        <p className="text-[10px] text-text-dim uppercase font-black bg-surface-hover px-2 py-0.5 rounded inline-block">
-                          {res.timestamp ? new Date(res.timestamp.seconds * 1000).toLocaleDateString() : 'Saving...'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-gold font-black text-2xl leading-none">{res.score} <span className="text-text-dim text-xs font-medium">/ {res.total}</span></div>
-                      <div className={`text-[10px] font-black uppercase tracking-widest mt-1 px-2 py-0.5 rounded-full inline-block ${parseFloat(res.percentage) > 70 ? 'bg-success/20 text-success' : 'bg-danger/20 text-danger'}`}>
-                        {res.percentage}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {history.length === 0 && (
-                <div className="text-center py-32 bg-surface/50 border-2 border-dashed border-border rounded-[3rem]">
-                  <HistoryIcon className="mx-auto text-border mb-6" size={64} />
-                  <p className="text-text-dim italic font-medium">No candidate records found in the system.</p>
-                </div>
-              )}
+            <motion.div key="history" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+              <HistoryDashboard 
+                history={history} 
+                onViewDetails={(res) => {
+                  setLastResult(res);
+                  setCurrentPage('result');
+                }}
+              />
             </motion.div>
           )}
 

@@ -18,4 +18,3 @@ View your app in AI Studio: https://ai.studio/apps/3f1d9c5c-be42-4dc9-b5ba-91116
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
-"# mcqexam" 

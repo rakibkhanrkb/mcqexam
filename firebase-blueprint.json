@@ -34,6 +34,18 @@
         "timestamp": { "type": "string", "format": "date-time" }
       },
       "required": ["studentName", "score", "total", "percentage"]
+    },
+    "UserAccount": {
+      "title": "User Account",
+      "description": "Student login credentials and info",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "password": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "password", "name"]
     }
   },
   "firestore": {
@@ -44,6 +56,10 @@
     "exam_results": {
       "schema": "ExamResult",
       "description": "Historical results of students"
+    },
+    "users": {
+      "schema": "UserAccount",
+      "description": "Student accounts for login"
     }
   }
 }
