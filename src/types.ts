@@ -16,6 +16,7 @@ export interface Question {
 
 export interface ExamResult {
   id?: string;
+  studentId: string;
   studentName: string;
   score: number;
   total: number;

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, deleteDoc, doc, writeBatch, getDocs } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, deleteDoc, doc, writeBatch, getDocs, limit } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { Question } from '../types';
 import { handleFirestoreError } from '../lib/error-handler';
-import { Trash2, Plus, Download, LogOut, ShieldCheck, Shield, Users, UserPlus, Search } from 'lucide-react';
+import { Trash2, Plus, Download, LogOut, ShieldCheck, Shield, Users, UserPlus, Search, History as HistoryIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface AdminPanelProps {
@@ -11,9 +11,10 @@ interface AdminPanelProps {
 }
 
 export default function AdminPanel({ onLogout }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'questions' | 'users'>('questions');
+  const [activeTab, setActiveTab] = useState<'questions' | 'users' | 'results'>('questions');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     text: '',
@@ -39,9 +40,22 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
       setUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
+    const r = query(collection(db, 'exam_results'), limit(500));
+    const unsubscribeResults = onSnapshot(r, (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Sort client-side to avoid index requirement
+      const sorted = data.sort((a: any, b: any) => {
+        const tA = a.timestamp?.seconds || 0;
+        const tB = b.timestamp?.seconds || 0;
+        return tB - tA;
+      });
+      setResults(sorted);
+    });
+
     return () => {
       unsubscribe();
       unsubscribeUsers();
+      unsubscribeResults();
     };
   }, []);
 
@@ -70,6 +84,30 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
       await deleteDoc(doc(db, 'users', id));
     } catch (error) {
       handleFirestoreError(error, 'delete', `users/${id}`);
+    }
+  };
+
+  const handleDeleteResult = async (id: string) => {
+    if (!confirm('Delete this exam record?')) return;
+    try {
+      await deleteDoc(doc(db, 'exam_results', id));
+    } catch (error) {
+      handleFirestoreError(error, 'delete', `exam_results/${id}`);
+    }
+  };
+
+  const handleClearResults = async () => {
+    if (!confirm('Wipe ALL exam results? This cannot be undone.')) return;
+    setLoading(true);
+    try {
+      const snap = await getDocs(collection(db, 'exam_results'));
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, 'write', 'exam_results');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -170,6 +208,12 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
               className={`px-6 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${activeTab === 'users' ? 'bg-accent text-white shadow-lg' : 'text-text-dim hover:text-text-main'}`}
             >
               <Users size={14} /> Users
+            </button>
+            <button 
+              onClick={() => setActiveTab('results')}
+              className={`px-6 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${activeTab === 'results' ? 'bg-accent text-white shadow-lg' : 'text-text-dim hover:text-text-main'}`}
+            >
+              <HistoryIcon size={14} /> Records
             </button>
           </div>
         </div>
@@ -304,7 +348,7 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
               </div>
             </div>
           </motion.div>
-        ) : (
+        ) : activeTab === 'users' ? (
           <motion.div 
             key="users-tab"
             initial={{ opacity: 0, x: 20 }}
@@ -401,6 +445,81 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div 
+            key="results-tab"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="space-y-8"
+          >
+            <div className="bg-surface border border-border rounded-[2.5rem] p-10 shadow-2xl min-h-[600px] flex flex-col">
+              <div className="flex justify-between items-center mb-10">
+                <div>
+                    <h3 className="text-2xl font-black italic flex items-center gap-3">
+                        Assessment Ledger <span className="bg-gold/20 text-gold text-xs py-1 px-4 rounded-full font-black not-italic">{results.length} Recorded</span>
+                    </h3>
+                    <p className="text-[10px] text-text-dim font-bold uppercase tracking-widest mt-1">Full access to student performance history</p>
+                </div>
+                <button 
+                  onClick={handleClearResults}
+                  disabled={loading || results.length === 0}
+                  className="px-6 py-3 bg-danger/10 text-danger border border-danger/20 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-danger hover:text-white transition-all flex items-center gap-2"
+                >
+                  <Trash2 size={14} /> Wipe All Records
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {results.map((res, i) => (
+                    <div key={res.id || i} className="bg-surface-hover border border-border p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group hover:border-accent/40 transition-all">
+                      <div className="flex items-center gap-4 mb-6 relative z-10">
+                        <div className="w-12 h-12 bg-accent/20 rounded-2xl flex items-center justify-center font-black text-accent text-lg">
+                          {res.studentName?.[0]?.toUpperCase() || 'S'}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-lg text-text-main pr-8">{res.studentName}</h4>
+                          <p className="text-[10px] font-black text-text-dim uppercase tracking-widest flex items-center gap-1.5">
+                             ID: {res.studentId}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4 relative z-10">
+                        <div className="flex justify-between items-end">
+                           <div className="space-y-1">
+                             <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Efficiency</p>
+                             <p className="text-4xl font-black italic text-gold">{res.percentage}</p>
+                           </div>
+                           <div className="text-right space-y-1">
+                              <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">Raw Score</p>
+                              <p className="text-lg font-bold text-text-main">{res.score} / {res.total}</p>
+                           </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-border/50 flex justify-between items-center text-[10px] font-black uppercase text-text-dim tracking-tighter">
+                           <span>{res.timestamp ? new Date(res.timestamp.seconds * 1000).toLocaleString() : 'Recent'}</span>
+                           <button 
+                             onClick={() => res.id && handleDeleteResult(res.id)}
+                             className="text-danger opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
+                           >
+                             <Trash2 size={16} />
+                           </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {results.length === 0 && (
+                   <div className="flex flex-col items-center justify-center py-40 text-text-dim border-2 border-dashed border-border rounded-[3rem]">
+                      <HistoryIcon size={64} className="opacity-10 mb-6" />
+                      <p className="italic font-bold text-lg uppercase tracking-widest">No evaluation records available</p>
+                   </div>
+                )}
               </div>
             </div>
           </motion.div>

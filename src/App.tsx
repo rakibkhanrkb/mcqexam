@@ -39,17 +39,38 @@ export default function App() {
       setQuestions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Question)));
     });
 
-    const qHistory = query(collection(db, 'exam_results'), orderBy('timestamp', 'desc'), limit(50));
-    const unsubH = onSnapshot(qHistory, (snap) => {
-      setHistory(snap.docs.map(d => ({ id: d.id, ...d.data() } as ExamResult)));
-    });
-
     return () => {
       unsubAuth();
       unsubQ();
-      unsubH();
     };
   }, []);
+
+  // Dedicated Student History Listener
+  useEffect(() => {
+    if (!studentAuth) {
+      setHistory([]);
+      return;
+    }
+
+    const qHistory = query(
+      collection(db, 'exam_results'), 
+      where('studentId', '==', studentAuth.userId),
+      limit(100) // Increased limit since we sort manually
+    );
+
+    const unsubH = onSnapshot(qHistory, (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as ExamResult));
+      // Manual client-side sort to avoid requiring a composite index
+      const sortedData = data.sort((a, b) => {
+        const timeA = a.timestamp?.seconds || 0;
+        const timeB = b.timestamp?.seconds || 0;
+        return timeB - timeA;
+      });
+      setHistory(sortedData);
+    });
+
+    return () => unsubH();
+  }, [studentAuth]);
 
   const handleStartExam = () => {
     if (!studentAuth) {
@@ -269,6 +290,7 @@ export default function App() {
               <ExamEngine 
                 questions={activeExamQuestions}
                 studentName={studentAuth?.name || 'Anonymous'}
+                studentId={studentAuth?.userId || 'anonymous'}
                 totalQuestions={examConfig.count}
                 timeLimitMinutes={examConfig.time}
                 onFinish={handleFinishExam}
@@ -278,13 +300,22 @@ export default function App() {
 
           {currentPage === 'history' && (
             <motion.div key="history" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <HistoryDashboard 
-                history={history} 
-                onViewDetails={(res) => {
-                  setLastResult(res);
-                  setCurrentPage('result');
-                }}
-              />
+              {!studentAuth ? (
+                <div className="max-w-md mx-auto py-20 text-center space-y-6 bg-surface border border-border rounded-[2.5rem] shadow-2xl">
+                  <AlertCircle size={48} className="text-danger mx-auto" />
+                  <h2 className="text-xl font-bold">Access Denied</h2>
+                  <p className="text-text-dim text-sm">Please log in as a student to view your exam records.</p>
+                  <button onClick={() => setCurrentPage('login')} className="bg-accent text-white px-8 py-3 rounded-xl font-bold">Login Portal</button>
+                </div>
+              ) : (
+                <HistoryDashboard 
+                  history={history} 
+                  onViewDetails={(res) => {
+                    setLastResult(res);
+                    setCurrentPage('result');
+                  }}
+                />
+              )}
             </motion.div>
           )}
 

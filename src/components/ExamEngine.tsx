@@ -10,12 +10,13 @@ import { motion, AnimatePresence } from 'motion/react';
 interface ExamEngineProps {
   questions: Question[];
   studentName: string;
+  studentId: string;
   totalQuestions: number;
   timeLimitMinutes: number;
   onFinish: (result: any) => void;
 }
 
-export default function ExamEngine({ questions, studentName, totalQuestions, timeLimitMinutes, onFinish }: ExamEngineProps) {
+export default function ExamEngine({ questions, studentName, studentId, totalQuestions, timeLimitMinutes, onFinish }: ExamEngineProps) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [userAnswers, setUserAnswers] = useState<Record<number, string>>({});
   const [timeLeft, setTimeLeft] = useState(timeLimitMinutes * 60);
@@ -61,6 +62,7 @@ export default function ExamEngine({ questions, studentName, totalQuestions, tim
       });
 
       const finalResultData = {
+        studentId: studentId || 'anonymous',
         studentName: studentName || 'Anonymous Student',
         score: score || 0,
         total: totalMarks || 0,
